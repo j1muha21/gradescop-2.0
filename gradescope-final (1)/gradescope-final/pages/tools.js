@@ -1,78 +1,69 @@
 import Layout from '../components/Layout';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Script from 'next/script';
 
+// Tab definitions
 const TABS = [
   { id: 'tool', label: '🎓 Grade Converter' },
-  { id: 'gpa',  label: '📊 GPA Calculator' },
+  { id: 'gpa', label: '📊 GPA Calculator' },
+  { id: 'flashcard', label: '🃏 Flashcard Tool' },
 ];
 
 export default function Tools() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('tool');
-  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [engineReady, setEngineReady] = useState(false);
 
-  // Set tab from URL query param
+  // Read ?tab= query param to set initial tab
   useEffect(() => {
     const tab = router.query.tab;
-    if (tab && ['tool', 'gpa'].includes(tab)) {
+    if (tab && ['tool', 'gpa', 'flashcard'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [router.query.tab]);
 
-  // Once engine script loads, retry init until DOM elements exist
-  useEffect(() => {
-    if (!scriptLoaded) return;
-    let attempts = 0;
-    const tryInit = () => {
-      const src = document.getElementById('srcCountry');
-      if (!src && attempts < 30) {
-        attempts++;
-        setTimeout(tryInit, 100);
-        return;
-      }
-      try {
+  // After engine script loads, initialise the tools
+  function onEngineLoad() {
+    setEngineReady(true);
+    try {
+      if (typeof window !== 'undefined') {
         if (window.init) window.init();
         if (window.initGPA) window.initGPA();
-        const lang = typeof localStorage !== 'undefined' && localStorage.getItem('gs_lang');
+        // Restore saved language
+        const lang = localStorage.getItem('gs_lang');
         if (lang && window.setLanguage) window.setLanguage(lang, null);
-      } catch (e) {
-        console.error('Engine init error:', e);
       }
-    };
-    tryInit();
-  }, [scriptLoaded]);
-
-  // Re-run initGPA when switching to GPA tab
-  useEffect(() => {
-    if (!scriptLoaded) return;
-    if (activeTab === 'gpa') {
-      setTimeout(() => window.initGPA && window.initGPA(), 50);
+    } catch (e) {
+      console.error('Engine init error:', e);
     }
-  }, [activeTab, scriptLoaded]);
+  }
 
   function switchTab(id) {
     setActiveTab(id);
+    // Update URL without reload
     router.replace({ pathname: '/tools', query: id !== 'tool' ? { tab: id } : {} }, undefined, { shallow: true });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   return (
     <Layout title="GradeScope — Tools" activePage="tools">
-
-      {/* Tab bar */}
+      {/* Tab switcher */}
       <div className="tools-tab-bar">
         {TABS.map(t => (
-          <button key={t.id} className={`tools-tab-btn ${activeTab === t.id ? 'active' : ''}`} onClick={() => switchTab(t.id)}>
+          <button
+            key={t.id}
+            className={`tools-tab-btn ${activeTab === t.id ? 'active' : ''}`}
+            onClick={() => switchTab(t.id)}
+          >
             {t.label}
-            <span className="dropdown-badge" style={{ marginLeft: '0.4rem' }}>LIVE</span>
+            <span className="dropdown-badge" style={{marginLeft:'0.4rem'}}>LIVE</span>
           </button>
         ))}
       </div>
 
-      {/* ── GRADE CONVERTER ── */}
-      <div style={{ display: activeTab === 'tool' ? 'block' : 'none' }}>
+      {/* Grade Converter */}
+      <div id="tool" className={`section ${activeTab === 'tool' ? 'active' : ''}`}>
         <div className="tool-wrap">
           <div className="tool-header">
             <p className="section-label" data-i18n="tool.label">Tools / Grade Converter</p>
@@ -146,7 +137,7 @@ export default function Tools() {
                 </table>
                 <div className="disclaimer">
                   <strong data-i18n="tool.disclaimerTitle">⚠ Academic Disclaimer:</strong>{' '}
-                  <span data-i18n="tool.disclaimerText">This conversion is provided for informational purposes only. Final grade recognition and admission decisions rest solely with the receiving institution.</span>
+                  <span data-i18n="tool.disclaimerText">This conversion is provided for informational purposes only. Final grade recognition, equivalency, and admission decisions rest solely with the receiving institution.</span>
                 </div>
               </div>
             </div>
@@ -154,8 +145,8 @@ export default function Tools() {
         </div>
       </div>
 
-      {/* ── GPA CALCULATOR ── */}
-      <div style={{ display: activeTab === 'gpa' ? 'block' : 'none' }}>
+      {/* GPA CALCULATOR */}
+      <div id="gpa" className={`section ${activeTab === 'gpa' ? 'active' : ''}`}>
         <div className="gpa-wrap">
           <div className="tool-header">
             <p className="section-label" data-i18n="gpa.label">Tools / GPA Calculator</p>
@@ -169,7 +160,7 @@ export default function Tools() {
                   <h2 data-i18n="gpa.courseEntry">Course Grade Entry</h2>
                   <div className="gpa-scale-switcher">
                     {['4.0','4.3','4.5','5.0'].map((s,i) => (
-                      <button key={s} className={`scale-pill ${i===0?'active':''}`} data-scale={s} onClick={e => window.setGPAScale && window.setGPAScale(s, e.currentTarget)}>{s}</button>
+                      <button key={s} className={`scale-pill ${i===0?'active':''}`} data-scale={s} onClick={e => window.setGPAScale && window.setGPAScale(s,e.currentTarget)}>{s}</button>
                     ))}
                   </div>
                 </div>
@@ -260,24 +251,136 @@ export default function Tools() {
         </div>
       </div>
 
-      {/* Engine — fires onLoad, then useEffect retries until DOM elements are ready */}
-      <Script src="/engine.js" strategy="afterInteractive" onLoad={() => setScriptLoaded(true)} />
+      {/* FLASHCARD TOOL */}
+      <div id="flashcard" className={`section ${activeTab === 'flashcard' ? 'active' : ''}`}>
+        <div className="flashcard-wrap">
+          <div className="tool-header">
+            <p className="section-label" data-i18n="fc.label">Tools / Flashcard Study Tool</p>
+            <h2 className="section-title" data-i18n="fc.title">Flashcard Study Tool</h2>
+            <p className="section-desc" data-i18n="fc.desc">Paste your study notes or upload a text file — the tool automatically converts your content into interactive flip flashcards.</p>
+          </div>
+          <div className="flashcard-layout">
+            <div className="fc-panel">
+              <div className="fc-panel-top">
+                <h2 data-i18n="fc.notesTitle">📝 Your Study Notes</h2>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:'0.72rem',color:'var(--gold)',letterSpacing:'.1em'}}>DETERMINISTIC PARSER</span>
+              </div>
+              <div className="fc-panel-body">
+                <div className="fc-mode-tabs">
+                  <button className="fc-tab active" onClick={e => window.fcSetMode && window.fcSetMode('text',e.currentTarget)} data-i18n="fc.pasteText">✏️ Paste Text</button>
+                  <button className="fc-tab" onClick={e => window.fcSetMode && window.fcSetMode('file',e.currentTarget)} data-i18n="fc.uploadFile">📁 Upload File</button>
+                </div>
+                <div id="fcTextMode">
+                  <textarea className="fc-textarea" id="fcTextarea" placeholder="Paste your notes here. Each paragraph, bullet point, or numbered item will become a separate flashcard.&#10;&#10;Example:&#10;• Photosynthesis: Process by which plants convert sunlight into glucose.&#10;• Mitosis: Cell division producing two identical daughter cells."></textarea>
+                </div>
+                <div id="fcFileMode" style={{display:'none'}}>
+                  <div className="fc-file-zone" id="fcDropZone" onClick={() => document.getElementById('fcFileInput').click()}>
+                    <span className="fz-icon">📄</span>
+                    <p><strong>Click to upload</strong> or drag and drop here</p>
+                    <p>Supports .txt and .pdf files · Max 5MB</p>
+                    <input type="file" id="fcFileInput" className="fc-file-input" accept=".txt,.pdf" />
+                  </div>
+                  <div id="fcFileName" className="fc-file-name" style={{display:'none'}}></div>
+                </div>
+                <div className="fc-split-row">
+                  <span className="fc-split-label" data-i18n="fc.splitBy">Split cards by:</span>
+                  <select className="fc-split-select" id="fcSplitMode">
+                    <option value="auto" data-i18n="fc.autoDetect">Auto-detect (recommended)</option>
+                    <option value="paragraph" data-i18n="fc.paragraphs">Paragraphs</option>
+                    <option value="bullet" data-i18n="fc.bullets">Bullet points / numbered list</option>
+                    <option value="sentence" data-i18n="fc.sentences">Sentences</option>
+                    <option value="colon" data-i18n="fc.colonPairs">Term: Definition (colon pairs)</option>
+                  </select>
+                </div>
+                <button className="fc-generate-btn" onClick={() => window.fcGenerate && window.fcGenerate()} data-i18n="fc.generateBtn">Generate Flashcards →</button>
+              </div>
+            </div>
+            <div className="fc-viewer" id="fcViewer">
+              <div className="fc-viewer-top">
+                <h2 data-i18n="fc.viewerTitle">🃏 Flashcard Viewer</h2>
+                <span className="fc-counter" id="fcCounter"></span>
+              </div>
+              <div className="fc-viewer-body" id="fcEmptyState">
+                <div className="fc-empty">
+                  <span className="fc-empty-icon">🃏</span>
+                  <p data-i18n="fc.emptyState">Paste your notes and click <strong>Generate Flashcards</strong> to start studying.<br /><br />Your content is parsed locally — nothing leaves your browser.</p>
+                </div>
+              </div>
+              <div className="fc-viewer-body" id="fcActiveState" style={{display:'none'}}>
+                <div className="fc-scene" onClick={() => window.fcFlip && window.fcFlip()} title="Click to flip">
+                  <div className="fc-card-inner" id="fcCardInner">
+                    <div className="fc-face fc-front">
+                      <span className="fc-face-label" data-i18n="fc.frontLabel">Card Front — Question / Term</span>
+                      <p className="fc-face-text" id="fcFrontText"></p>
+                    </div>
+                    <div className="fc-face fc-back">
+                      <span className="fc-face-label" data-i18n="fc.backLabel">Card Back — Answer / Detail</span>
+                      <p className="fc-face-text" id="fcBackText"></p>
+                    </div>
+                  </div>
+                </div>
+                <p className="fc-hint" data-i18n="fc.hint">Click card or press Space to flip · ← → arrow keys to navigate</p>
+                <div className="fc-ctrl">
+                  <button className="fc-btn" id="fcPrevBtn" onClick={() => window.fcNav && window.fcNav(-1)} data-i18n="fc.prev">← Previous</button>
+                  <button className="fc-btn-flip" onClick={() => window.fcFlip && window.fcFlip()} data-i18n="fc.flip">Flip Card</button>
+                  <button className="fc-btn" id="fcNextBtn" onClick={() => window.fcNav && window.fcNav(1)} data-i18n="fc.next">Next →</button>
+                </div>
+                <div className="fc-progress-wrap">
+                  <div className="fc-progress-track">
+                    <div className="fc-progress-fill" id="fcProgressFill"></div>
+                  </div>
+                  <div className="fc-progress-label" id="fcProgressLabel"></div>
+                </div>
+              </div>
+              <div className="fc-deck-tray" id="fcDeckTray" style={{display:'none'}}>
+                <h4 data-i18n="fc.allCards">All Cards in Deck</h4>
+                <div id="fcDeckList"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Load the engine as a client-side script */}
+      <Script src="/engine.js" strategy="afterInteractive" onLoad={onEngineLoad} />
 
       <style jsx>{`
         .tools-tab-bar {
-          display: flex; gap: 0.5rem; padding: 1rem 2rem;
-          background: var(--ink); border-bottom: 2px solid var(--gold);
-          overflow-x: auto; position: sticky; top: 62px; z-index: 90;
+          display: flex;
+          gap: 0.5rem;
+          padding: 1rem 2rem;
+          background: var(--ink);
+          border-bottom: 2px solid var(--gold);
+          overflow-x: auto;
+          position: sticky;
+          top: 62px;
+          z-index: 90;
         }
         .tools-tab-btn {
-          background: transparent; border: 1px solid rgba(255,255,255,0.15);
-          color: rgba(255,255,255,0.6); padding: 0.5rem 1.1rem; border-radius: 6px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.88rem; font-weight: 500;
-          cursor: pointer; transition: all 0.2s; white-space: nowrap;
-          display: flex; align-items: center;
+          background: transparent;
+          border: 1px solid rgba(255,255,255,0.15);
+          color: rgba(255,255,255,0.6);
+          padding: 0.5rem 1.1rem;
+          border-radius: 6px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.88rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          white-space: nowrap;
+          display: flex;
+          align-items: center;
         }
         .tools-tab-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
-        .tools-tab-btn.active { background: var(--gold); color: var(--ink); border-color: var(--gold); font-weight: 700; }
+        .tools-tab-btn.active {
+          background: var(--gold);
+          color: var(--ink);
+          border-color: var(--gold);
+          font-weight: 700;
+        }
+        .tools-tab-btn.active .dropdown-badge { background: var(--ink); color: var(--gold); }
+        .section { display: none; }
+        .section.active { display: block; }
       `}</style>
     </Layout>
   );
