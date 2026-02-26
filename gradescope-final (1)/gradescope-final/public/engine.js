@@ -83,14 +83,24 @@ const IE_CLASSES = [
 function init() {
   const src = document.getElementById('srcCountry');
   const dst = document.getElementById('dstCountry');
-  COUNTRIES.forEach(c => {
-    src.add(new Option(`${c.flag} ${c.name}`, c.name));
-    dst.add(new Option(`${c.flag} ${c.name}`, c.name));
-  });
-  dst.value = 'Germany';
+  // Only add options if React hasn't already rendered them
+  if (src.options.length === 0) {
+    COUNTRIES.forEach(c => {
+      src.add(new Option(`${c.flag} ${c.name}`, c.name));
+      dst.add(new Option(`${c.flag} ${c.name}`, c.name));
+    });
+  }
+  if (!dst.value || dst.value === '') dst.value = 'Germany';
   updateHint();
-  src.addEventListener('change', updateHint);
-  dst.addEventListener('change', updateHint);
+  // Remove old listeners before adding new ones (safe re-init)
+  const newSrc = src.cloneNode(true);
+  const newDst = dst.cloneNode(true);
+  src.parentNode.replaceChild(newSrc, src);
+  dst.parentNode.replaceChild(newDst, dst);
+  newSrc.value = src.value;
+  newDst.value = dst.value || 'Germany';
+  newSrc.addEventListener('change', updateHint);
+  newDst.addEventListener('change', updateHint);
   document.getElementById('swapBtn').addEventListener('click', swapCountries);
   buildCountryCards();
 }
@@ -1789,3 +1799,14 @@ function mobileNav(section) {
   if (typeof closeMobileMenu === 'function') closeMobileMenu();
   showSection(section);
 }
+
+// ── Expose all tool functions on window for Next.js React components ──
+window.init            = init;
+window.updateHint      = updateHint;
+window.swapCountries   = swapCountries;
+window.convertGrade    = convertGrade;
+window.initGPA         = initGPA;
+window.addCourseRow    = addCourseRow;
+window.clearAll        = clearAll;
+window.calculateGPA    = calculateGPA;
+window.setGPAScale     = setGPAScale;

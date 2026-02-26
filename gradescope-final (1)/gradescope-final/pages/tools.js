@@ -3,6 +3,42 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Script from 'next/script';
 
+// Country list mirrored from engine.js — rendered by React so options
+// are always present in the DOM and never wiped on re-render.
+const COUNTRIES = [
+  { name:"Argentina",            flag:"🇦🇷" },
+  { name:"Canada",               flag:"🇨🇦" },
+  { name:"China",                flag:"🇨🇳" },
+  { name:"Ethiopia",             flag:"🇪🇹" },
+  { name:"Finland",              flag:"🇫🇮" },
+  { name:"France",               flag:"🇫🇷" },
+  { name:"Germany",              flag:"🇩🇪" },
+  { name:"Ghana",                flag:"🇬🇭" },
+  { name:"India",                flag:"🇮🇳" },
+  { name:"Iran",                 flag:"🇮🇷" },
+  { name:"Ireland",              flag:"🇮🇪" },
+  { name:"Italy",                flag:"🇮🇹" },
+  { name:"Kenya",                flag:"🇰🇪" },
+  { name:"Malaysia",             flag:"🇲🇾" },
+  { name:"Netherlands",          flag:"🇳🇱" },
+  { name:"New Zealand",          flag:"🇳🇿" },
+  { name:"Nigeria",              flag:"🇳🇬" },
+  { name:"Pakistan",             flag:"🇵🇰" },
+  { name:"Philippines",          flag:"🇵🇭" },
+  { name:"Poland",               flag:"🇵🇱" },
+  { name:"Portugal",             flag:"🇵🇹" },
+  { name:"South Africa",         flag:"🇿🇦" },
+  { name:"South Korea",          flag:"🇰🇷" },
+  { name:"Spain",                flag:"🇪🇸" },
+  { name:"Sweden",               flag:"🇸🇪" },
+  { name:"Taiwan",               flag:"🇹🇼" },
+  { name:"Turkey",               flag:"🇹🇷" },
+  { name:"United Arab Emirates", flag:"🇦🇪" },
+  { name:"United Kingdom",       flag:"🇬🇧" },
+  { name:"United States",        flag:"🇺🇸" },
+  { name:"Vietnam",              flag:"🇻🇳" },
+];
+
 const TABS = [
   { id: 'tool', label: '🎓 Grade Converter' },
   { id: 'gpa',  label: '📊 GPA Calculator' },
@@ -11,6 +47,7 @@ const TABS = [
 export default function Tools() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('tool');
+  const [dstCountry, setDstCountry] = useState('Germany');
 
   // Set tab from URL query param
   useEffect(() => {
@@ -20,20 +57,27 @@ export default function Tools() {
     }
   }, [router.query.tab]);
 
-  // On mount: poll until engine.js functions exist AND DOM is ready, then init.
-  // Polling avoids reliance on Script onLoad which can silently skip in React
-  // Strict Mode and on client-side navigations when the script is already cached.
+  // On mount: poll until engine.js is loaded, then wire up event listeners.
+  // Options are already rendered by React — engine.js just needs to attach
+  // its listeners and read the selected values.
   useEffect(() => {
     let attempts = 0;
     function tryInit() {
       const src = document.getElementById('srcCountry');
-      if (!window.init || !src) {
-        if (attempts++ < 60) { setTimeout(tryInit, 100); return; }
+      const dst = document.getElementById('dstCountry');
+      if (!window.updateHint || !src || !dst || src.options.length === 0) {
+        if (attempts++ < 80) { setTimeout(tryInit, 100); return; }
+        return;
       }
       try {
-        if (window.init) window.init();
+        // Wire up engine listeners — don't re-populate options (React owns them)
+        src.addEventListener('change', window.updateHint);
+        dst.addEventListener('change', window.updateHint);
+        document.getElementById('swapBtn').addEventListener('click', window.swapCountries);
+        window.updateHint();
+        // GPA init
         if (window.initGPA) window.initGPA();
-        // Re-apply saved language so tool labels render translated
+        // Re-apply saved language
         const lang = typeof localStorage !== 'undefined' && localStorage.getItem('gs_lang');
         if (lang && window.GS_setLanguage) window.GS_setLanguage(lang, null);
       } catch (e) {
@@ -41,6 +85,13 @@ export default function Tools() {
       }
     }
     tryInit();
+    // Cleanup listeners on unmount
+    return () => {
+      const src = document.getElementById('srcCountry');
+      const dst = document.getElementById('dstCountry');
+      if (src && window.updateHint) src.removeEventListener('change', window.updateHint);
+      if (dst && window.updateHint) dst.removeEventListener('change', window.updateHint);
+    };
   }, []);
 
   // Re-run initGPA when switching to GPA tab
@@ -86,12 +137,21 @@ export default function Tools() {
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label" data-i18n="tool.sourceCountry">Source Country</label>
-                  <select className="form-select" id="srcCountry"></select>
+                  {/* Options rendered by React — never wiped on re-render */}
+                  <select className="form-select" id="srcCountry">
+                    {COUNTRIES.map(c => (
+                      <option key={c.name} value={c.name}>{c.flag} {c.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <button className="swap-btn" id="swapBtn" title="Swap countries">⇄</button>
                 <div className="form-group">
                   <label className="form-label" data-i18n="tool.destCountry">Destination Country</label>
-                  <select className="form-select" id="dstCountry"></select>
+                  <select className="form-select" id="dstCountry" value={dstCountry} onChange={e => setDstCountry(e.target.value)}>
+                    {COUNTRIES.map(c => (
+                      <option key={c.name} value={c.name}>{c.flag} {c.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="grade-row">
@@ -258,7 +318,6 @@ export default function Tools() {
         </div>
       </div>
 
-      {/* Engine — polling in useEffect handles load timing, no onLoad needed */}
       <Script src="/engine.js" strategy="afterInteractive" />
 
       <style jsx>{`
